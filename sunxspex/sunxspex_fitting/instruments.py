@@ -679,17 +679,26 @@ class RhessiLoader(InstrumentBlueprint):
         # default is no background and all data is the spectrum to be fitted
         self._full_obs_time = [self._time_bins_perspec[0, 0], self._time_bins_perspec[-1, -1]]
         counts = np.sum(self._data_time_select(stime=self._full_obs_time[0], full_data=self._counts_perspec, etime=self._full_obs_time[1]), axis=0)
+
+
+        count_rate = np.sum(self._data_time_select(stime=self._full_obs_time[0], full_data=self._count_rate_perspec,
+                              etime=self._full_obs_time[1]), axis=0)
+
+
         counts_err = np.sqrt(np.sum(self._data_time_select(stime=self._full_obs_time[0], full_data=self._counts_err_perspec,
-                             etime=self._full_obs_time[1])**2, axis=0))  # sum errors in quadrature, Poisson still sqrt(N)
+                              etime=self._full_obs_time[1])**2, axis=0))
+
+        count_rate_error = np.sqrt(np.sum(self._data_time_select(stime=self._full_obs_time[0], full_data=self._count_rate_error_perspec,
+                              etime=self._full_obs_time[1])**2, axis=0))
 
         _livetimes = np.mean(self._data_time_select(stime=self._full_obs_time[0], full_data=self._lvt_perspec,
                              etime=self._full_obs_time[1]), axis=0)  # to convert a model count rate to counts, so need mean
         eff_exp = np.diff(self._full_obs_time)[0].to_value("s")*_livetimes
 
         channel_binning = np.diff(obs_channel_bins, axis=1).flatten()
-        count_rate = counts/eff_exp/channel_binning  # count rates from here are counts/s/keV
-        count_rate_error = counts_err/eff_exp/channel_binning  # was np.sqrt(counts)/eff_exp/channel_binning
-
+        count_rate = count_rate/channel_binning
+        count_rate_error = count_rate_error/channel_binning
+        
         # what spectral info you want to know from this observation
         return {"photon_channel_bins": photon_bins,
                 "photon_channel_mids": np.mean(photon_bins, axis=1),
@@ -821,7 +830,10 @@ class RhessiLoader(InstrumentBlueprint):
 
         # sum counts over time range
         self._loaded_spec_data["counts"] = np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_perspec, etime=self._end_event_time), axis=0)
-        self._loaded_spec_data["count_error"] = np.sqrt(self._loaded_spec_data["counts"])
+
+        counts_err = np.sqrt(np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_err_perspec, etime=self._end_event_time)**2, axis=0))
+
+        self._loaded_spec_data["count_error"] = counts_err
 
         # isolate livetimes and time binning
         _livetimes = np.mean(self._data_time_select(stime=self._start_event_time, full_data=self._lvt_perspec,
@@ -830,9 +842,14 @@ class RhessiLoader(InstrumentBlueprint):
         _actual_last_bin = self._data_time_select(stime=self._start_event_time, full_data=self._time_bins_perspec[:, 1], etime=self._end_event_time)[-1]
         self._loaded_spec_data["effective_exposure"] = np.diff([_actual_first_bin, _actual_last_bin])[0].to_value("s")*_livetimes
 
-        # calculate new count rates and errors
-        self._loaded_spec_data["count_rate"] = self._loaded_spec_data["counts"]/self._loaded_spec_data["effective_exposure"]/self._loaded_spec_data["count_channel_binning"]
-        self._loaded_spec_data["count_rate_error"] = np.sqrt(self._loaded_spec_data["counts"])/self._loaded_spec_data["effective_exposure"]/self._loaded_spec_data["count_channel_binning"]
+
+        # calculate new count rates and errors assuming we need livetime correction???
+        #self._loaded_spec_data["count_rate"] = self._loaded_spec_data["counts"]/self._loaded_spec_data["effective_exposure"]/self._loaded_spec_data["count_channel_binning"]
+        #self._loaded_spec_data["count_rate_error"] = counts_err/self._loaded_spec_data["effective_exposure"]/self._loaded_spec_data["count_channel_binning"]
+        
+        self._loaded_spec_data["count_rate"] = np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._count_rate_perspec, etime=self._end_event_time), axis=0)/self._loaded_spec_data["count_channel_binning"]
+        self._loaded_spec_data["count_rate_error"] = np.sqrt(np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._count_rate_error_perspec, etime=self._end_event_time)**2, axis=0))/self._loaded_spec_data["count_channel_binning"]
+
 
     @property
     def start_event_time(self):
@@ -1506,7 +1523,8 @@ class StixLoader(RhessiLoader):
         2d array of the time bins for each spectrum (time_bins), 2d array of livetimes/counts/count rates/count
         rate errors per channel bin and spectrum (lvt/counts/cts_rates/cts_rate_err, respectively).
         """
-        return stix_spec._get_spec_file_info(f_pha)
+        #return stix_spec._get_spec_file_info(f_pha)
+        return stix_spec._get_IDLspec_file_info(f_pha)
 
     def _getsrm(self, f_srm):
         """ Return all STIX SRM data needed for fitting.

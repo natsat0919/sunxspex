@@ -2811,7 +2811,7 @@ class SunXspex:
         if not hasattr(self, "__mcmc_samples__") or not self._no_mcmc_change() or (hasattr(self, "_samp_inds") and len(self._samp_inds) != num_of_samples):
             self._randsamples_or_all(hex_grid, num_of_samples)
 
-    def _plot_mcmc_mods(self, ax, res_ax, res_info, spectrum="combined", num_of_samples=100, hex_grid=False, _rebin_info=None):
+    def _plot_mcmc_mods(self, ax, res_ax, res_info, spectrum="combined", num_of_samples=100, hex_grid=False, _rebin_info=None, bg_rate=None):
         """ Plots MCMC runs (and residuals) on the given axes.
 
         Parameters
@@ -2871,6 +2871,8 @@ class SunXspex:
             if _rebin_info is not None:
                 ctr = self._bin_model(ctr, *_rebin_info)
                 e_mids = np.mean(_rebin_info[2], axis=1)
+            if bg_rate is not None:
+                ctr -= bg_rate
 
             residuals = [(res_info[0][i] - ctr[i])/res_info[1][i] if res_info[1][i] > 0 else 0 for i in range(len(res_info[1]))]
             _randctsres.append(residuals)
@@ -3062,9 +3064,9 @@ class SunXspex:
                 par_spec = p.split("_spectrum")
                 error = self.params["Error", p]
                 if np.all(error) == np.all([0, 0]):
-                    param_str += [par_spec[0]+": {0:.2e}".format(self.params["Value", p])+"\n"]
+                    param_str += [par_spec[0]+": {0:.2f}".format(self.params["Value", p])+"\n"]
                 else:
-                    param_str += [par_spec[0]+": {0:.2e}".format(self.params["Value", p])+"$^{{+{0:.2e}}}_{{-{1:.2e}}}$".format(error[1], error[0])+"\n"]  # str(round(self.params["Value", p], 2))
+                    param_str += [par_spec[0]+": {0:.2f}".format(self.params["Value", p])+"$^{{+{0:.2f}}}_{{-{1:.2f}}}$".format(error[1], error[0])+"\n"]  # str(round(self.params["Value", p], 2))
             # join param strings correctly and annotate the axes depending on whether they should be coloured with sub-models if present
             self._annotate_params(axs, param_str, submod_param_cols, _xycoords)
 
@@ -3221,7 +3223,7 @@ class SunXspex:
         -------
         Spectrum axes and residuals axes.
         """
-        energy_channels, energy_channel_error, count_rates, count_rate_errors, count_rate_model = data_arrays
+        energy_channels, energy_channel_error, count_rates, count_rate_errors, count_rate_model, bg_rate = data_arrays
 
         axs = axes if type(axes) != type(None) else plt.gca()
         fitting_range = fitting_range if type(fitting_range) != type(None) else self.energy_fitting_range
@@ -3242,12 +3244,18 @@ class SunXspex:
         # check if the plot is to produce rebinned data and models
         _return_cts_rate_mod = True if hasattr(self, "_model") else False
         new_bins, new_bin_width, old_bins, old_bin_width, energy_channels, energy_channel_error, count_rates, count_rate_errors, count_rate_model, energy_channels_res = self._setup_rebin_plotting(
-            rebin_and_spec, data_arrays, _return_cts_rate_mod=_return_cts_rate_mod)
+            rebin_and_spec, data_arrays[:-1], _return_cts_rate_mod=_return_cts_rate_mod)
         self._plot_rebin_info = [old_bin_width, old_bins, new_bins, new_bin_width]  # for background is needed
+
+        count_rates_bg_subtract = count_rates - bg_rate
+        count_rates_bg_subtract[count_rates_bg_subtract < 0] = 0
+
+        count_rate_errors[count_rates_bg_subtract <= 0] = 0
+
 
         # plot data
         axs.errorbar(energy_channels,
-                     count_rates,
+                     count_rates_bg_subtract,
                      xerr=energy_channel_error,
                      yerr=count_rate_errors,
                      color='k',
@@ -3265,8 +3273,7 @@ class SunXspex:
         residuals = [(count_rates[i] - count_rate_model[i])/count_rate_errors[i] if count_rate_errors[i] > 0 else 0 for i in range(len(count_rate_errors))]
         residuals = np.column_stack((residuals, residuals)).flatten()  # non-uniform binning means we have to plot every channel edge instead of just using drawstyle='steps-mid'in .plot()
 
-        # if we have submodels, plot them
-        spec_submods, submod_param_cols = self._plot_submodels(axs, submod_spec, rebin_and_spec[0], (old_bin_width, old_bins, new_bins, new_bin_width, energy_channels))
+        
 
         # residuals plotting
         divider = make_axes_locatable(axs)
@@ -3280,12 +3287,15 @@ class SunXspex:
 
         # plot final result, final model and resulting residuals
         if self._plr:
-            axs.plot(energy_channels, count_rate_model, linewidth=2, color="k")
+            axs.plot(energy_channels, count_rate_model - bg_rate, linewidth=2, color="k", alpha=0.8)
             res.plot(energy_channels_res, residuals, color='k', alpha=0.8)  # , drawstyle='steps-mid'
 
         if self._latest_fit_run == "mcmc":
             _rebin_info = [old_bin_width, old_bins, new_bins, new_bin_width] if type(rebin_and_spec[0]) != type(None) else None
-            self._plot_mcmc_mods(axs, res, [count_rates, count_rate_errors, energy_channels_res], spectrum=submod_spec, num_of_samples=num_of_samples, hex_grid=hex_grid, _rebin_info=_rebin_info)
+            self._plot_mcmc_mods(axs, res, [count_rates_bg_subtract, count_rate_errors, energy_channels_res], spectrum=submod_spec, num_of_samples=num_of_samples, hex_grid=hex_grid, _rebin_info=_rebin_info, bg_rate=bg_rate)
+
+        # if we have submodels, plot them
+        spec_submods, submod_param_cols = self._plot_submodels(axs, submod_spec, rebin_and_spec[0], (old_bin_width, old_bins, new_bins, new_bin_width, energy_channels))
 
         # plot fitting range
         self._plot_fitting_range(res, fitting_range, submod_spec)
@@ -3702,11 +3712,18 @@ class SunXspex:
         for s, ax in zip(range(number_of_plots), subplot_axes_grid):
             if (s < number_of_plots-1) or ((s == number_of_plots-1) and not can_combine) or (number_of_plots == 1):
                 self.plotting_info['spectrum'+str(s+1)] = {}
+
+                if 'scaled_background_'+'spectrum'+str(s+1) in self._scaled_backgrounds:
+                    bg_rate = self._scaled_backgrounds['scaled_background_'+'spectrum'+str(s+1)]
+                else:
+                    bg_rate = np.zeros(len(self.data.loaded_spec_data['spectrum'+str(s+1)]["count_rate"]))
+
                 axs, res = self._plot_1spec((self.data.loaded_spec_data['spectrum'+str(s+1)]['count_channel_mids'],
                                              self.data.loaded_spec_data['spectrum'+str(s+1)]["count_channel_binning"]/2,
                                              self.data.loaded_spec_data['spectrum'+str(s+1)]["count_rate"],
                                              self.data.loaded_spec_data['spectrum'+str(s+1)]["count_rate_error"],
-                                             models[s]),
+                                             models[s],
+                                             bg_rate),
                                             axes=ax,
                                             fitting_range=self.energy_fitting_range['spectrum'+str(s+1)],
                                             plot_params=self._param_groups[s],
@@ -3724,11 +3741,14 @@ class SunXspex:
 
             else:
                 self.plotting_info['combined'] = {}
+                #Set background rate to 0 as we only combine NuSTAR spectra and they have 0 beckground anyways
+                bg_rate = np.zeros(len(np.mean(np.array(_count_rates), axis=0)))
                 axs, res = self._plot_1spec((self.data.loaded_spec_data[f'spectrum{s}']['count_channel_mids'],
                                              self.data.loaded_spec_data['spectrum'+str(s)]["count_channel_binning"]/2,
                                              np.mean(np.array(_count_rates), axis=0),
                                              np.sqrt(np.sum(np.array(_count_rate_errors)**2, axis=0))/len(_count_rate_errors),
-                                             np.mean(models, axis=0)),
+                                             np.mean(models, axis=0),
+                                             bg_rate),
                                             axes=ax,
                                             fitting_range=self.energy_fitting_range,
                                             submod_spec='combined',

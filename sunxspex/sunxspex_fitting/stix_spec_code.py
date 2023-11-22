@@ -9,7 +9,96 @@ from astropy.time import Time, TimeDelta
 
 from . import io
 
-__all__ = ["_get_spec_file_info", "_spec_file_units_check", "_get_srm_file_info"]
+__all__ = ["_get_IDLspec_file_info", "_get_spec_file_info", "_spec_file_units_check", "_get_srm_file_info"]
+
+def _get_IDLspec_file_info(spec_file):
+    """
+    Read STIX spectral fits file and extracts useful information from it.
+
+    Parameters
+    ----------
+    spec_file : `str`, `file-like` or `pathlib.Path`
+            STIX spectral fits file (see `~astropy.fits.io.open` for details)
+
+    Returns
+    -------
+    `dict`
+        STIX spectral data.
+    """
+    from astropy.io import fits
+    sdict = {}
+
+    with fits.open(spec_file) as hdul:
+        for i in range(len(hdul)):
+                sdict[str(i)] = [hdul[i].header, hdul[i].data]
+
+    #All useful spectra info is in index "2", so get the energy bins
+    channel_bins = np.concatenate((sdict["2"][1]['E_MIN'][:, None], sdict["2"][1]['E_MAX'][:, None]), axis=1)
+    
+
+    channel_bins_inds=np.empty(len(channel_bins))
+    channel_bins_inds.fill(True)
+    #Get TIME_DEL as we only get counts/s but also want values of counts
+    times_mids = sdict["1"][1]["TIME"]
+    time_del = sdict["1"][1]["TIMEDEL"]
+  
+    time_diff_so2e = sdict["1"][0]["TIME_SHI"]  # time difference between Sun2Earth and Sun2SO
+
+    # if odd `t` in seconds then edges are [midt-floor(bin_width/2), midt+ceil(bin_width/2)]
+    # e.g., mid_t=19, del_t=13 then edges would be [19-6, 19+7]=[13,26]
+    _minus_half_bin_width = (time_del)/2
+    t_lo = times_mids - _minus_half_bin_width
+
+    _plus_half_bin_width = time_del/2
+    t_hi = times_mids + _plus_half_bin_width 
+    
+    #Calculating spectral times absTime[i] = mjd2any(MJDREF + TIMEZERO) + TIME[i] 
+    # So the time of first observation:
+    timemjd = sdict["1"][0]["MJDREF"] + sdict["1"][0]["TIMEZERO"]
+    date_beg = Time(timemjd, format='mjd', scale='utc')
+    date_beg.format = 'isot'
+    
+
+    spec_stimes = [date_beg +TimeDelta(dt * u.s) for dt in t_lo]
+
+    spec_etimes = [date_beg+TimeDelta(dt * u.s) for dt in t_hi]
+
+    time_bins = np.concatenate((np.array(spec_stimes)[:, None], np.array(spec_etimes)[:, None]), axis=1)
+    
+    #Getting livetime
+    lvt = sdict["1"][1]["LIVETIME"]
+    
+    #What is stat err and how is it calculated
+    #Getting count rate
+    cts_rates = sdict["1"][1]["RATE"]
+
+    cts_rates[np.nonzero(cts_rates<0)] = 0
+
+    cts_rate_err = sdict["1"][1]["STAT_ERR"]
+
+    counts_err = cts_rate_err * time_del[:, None]
+
+    counts = cts_rates * time_del[:, None]
+
+    # Adding the 3% above 10 keV, 5% bellow 10keV  or 7% systematic errors bellow 7keV
+    #Getting the array with percentages coresponding to each energy bin
+    energy_bin_low = channel_bins[:,0]
+    energy_conditions = [ energy_bin_low < 7, (energy_bin_low < 10) & (energy_bin_low >= 7), energy_bin_low >= 10]
+    percentage = [0.07, 0.05, 0.03]
+
+    systematic_err_percentage = np.select(energy_conditions, percentage)
+
+    #Calculating systematic error
+    systematic_err = (systematic_err_percentage * counts)
+    
+    #Adding the two errors in quadrature
+    counts_err = np.sqrt(counts_err**2 + systematic_err**2)
+
+    #Count rate error
+    cts_rate_err = counts_err / time_del[:, None]
+
+
+    return channel_bins, channel_bins_inds, time_bins, lvt, counts, counts_err, cts_rates, cts_rate_err
 
 
 def _get_spec_file_info(spec_file):
