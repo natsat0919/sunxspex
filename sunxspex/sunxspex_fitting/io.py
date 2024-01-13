@@ -6,7 +6,7 @@ import numpy as np
 from astropy.io import fits
 
 __all__ = ["_read_pha", "_read_arf", "_read_rmf", "_read_rhessi_spec_file", "_read_rhessi_srm_file",
-           "_read_stix_spec_file", "_read_stix_srm_file"]
+           "_read_stix_spec_file", "_read_stix_srm_file", "_read_xsm_pha_file", "_read_xsm_rmf_file"]
 
 
 def _read_pha(file):
@@ -160,3 +160,52 @@ def _read_stix_srm_file(srm_file):
     return {"photon_energy_bin_edges": pcb,
             "count_energy_bin_edges": np.concatenate((d3['E_MIN'][:, None], d3['E_MAX'][:, None]), axis=1),
             "drm": d1['MATRIX']*d0["GEOAREA"]}
+
+def _read_xsm_pha_file(file):
+    """
+    Read a .pha file and extract useful information from it.
+
+    Parameters
+    ----------
+    file : `str`, `file-like` or `pathlib.Path`
+        A .pha file (see `~astropy.fits.io.open` for details).
+
+    Returns
+    -------
+    `tuple`
+        The channel numbers, counts, and the livetime for the observation.
+    """
+    with fits.open(file) as hdul:
+        data = hdul[1].data
+
+    return data['channel'], data['counts'][:,1:], data['sys_err'][:,1:], data['stat_err'][:,1:], data['exposure'], data['tstart'], data['tstop']  
+
+def _read_xsm_rmf_file(file):
+    """
+    Read a .rmf file and extract useful information from it.
+
+    Parameters
+    ----------
+    file :  `str`, `file-like` or `pathlib.Path`
+        A .rmf file (see `~astropy.fits.io.open` for details).
+
+    Returns
+    -------
+    `tuple`
+        The low and high boundary of energy bins (data['energ_lo'], data['energ_hi']), number of sub-set channels in the energy
+        bin (data['n_grp']), starting index of each sub-set of channels (data['f_chan']),
+        number of channels in each sub-set (data['n_chan']), redistribution matrix [counts per photon] (data['matrix']).
+    """
+
+    with fits.open(file) as hdul:
+        data1 = hdul[1].data
+        data2 = hdul[2].data
+
+    count_bin_lo = data1["e_min"]
+    count_bin_hi = data1["e_max"]
+
+    photon_bin_lo = data2["energ_lo"]
+    photon_bin_hi = data2["energ_hi"]
+    
+
+    return count_bin_lo[1:], count_bin_hi[1:], photon_bin_lo, photon_bin_hi, data2['matrix']
