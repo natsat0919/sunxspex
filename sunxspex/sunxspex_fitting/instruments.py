@@ -1660,7 +1660,7 @@ class XsmLoader(InstrumentBlueprint):
                 self._counts_err_perspec[i, :]  = counts_err[i, :][count_bins_mask]
 
             # get the count rate information
-            self._count_rate_perspec, self._count_rate_error_perspec, self._time_bins_perspec = xsm_spec.flux_cts_spec(self._counts_perspec, self._counts_err_perspec, count_bins_mask, count_channel_binning, self._lvt_perspec, tstart, tstop)
+            self._count_rate_perspec, self._count_rate_error_perspec, self._time_bins_perspec = xsm_spec.flux_cts_spec(self._counts_perspec, self._counts_err_perspec, count_channel_binning, self._lvt_perspec, tstart, tstop)
 
             self._full_obs_time = [self._time_bins_perspec[0, 0], self._time_bins_perspec[-1, -1]]
 
@@ -1798,9 +1798,7 @@ class XsmLoader(InstrumentBlueprint):
         # sum counts over time range
         self._loaded_spec_data["counts"] = np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_perspec, etime=self._end_event_time), axis=0)
 
-        counts_err = np.sqrt(np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_err_perspec, etime=self._end_event_time)**2, axis=0))
-
-        self._loaded_spec_data["count_error"] = counts_err
+        self._loaded_spec_data["count_error"] = np.sqrt(np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_err_perspec, etime=self._end_event_time)**2, axis=0))
 
         # isolate livetimes and time binning
         _livetimes = np.mean(self._data_time_select(stime=self._start_event_time, full_data=self._lvt_perspec,
@@ -1810,9 +1808,6 @@ class XsmLoader(InstrumentBlueprint):
         self._loaded_spec_data["effective_exposure"] = np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._lvt_perspec, etime=self._end_event_time), axis=0)
         self._loaded_spec_data["count_rate"] = np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_perspec, etime=self._end_event_time), axis=0)/self._loaded_spec_data["count_channel_binning"]/ np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._lvt_perspec, etime=self._end_event_time), axis=0)
         self._loaded_spec_data["count_rate_error"] = np.sqrt(np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._counts_err_perspec, etime=self._end_event_time)**2, axis=0))/self._loaded_spec_data["count_channel_binning"]/ np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._lvt_perspec, etime=self._end_event_time), axis=0)
-
-        #self._loaded_spec_data["count_rate"] = np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._count_rate_perspec, etime=self._end_event_time), axis=0)/self._loaded_spec_data["count_channel_binning"]
-        #self._loaded_spec_data["count_rate_error"] = np.sqrt(np.sum(self._data_time_select(stime=self._start_event_time, full_data=self._count_rate_error_perspec, etime=self._end_event_time)**2, axis=0))/self._loaded_spec_data["count_channel_binning"]
 
 
     @property

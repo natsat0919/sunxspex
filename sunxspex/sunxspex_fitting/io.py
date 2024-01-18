@@ -178,7 +178,7 @@ def _read_xsm_pha_file(file):
     with fits.open(file) as hdul:
         data = hdul[1].data
 
-    return data['channel'], data['counts'][:,1:], data['sys_err'][:,1:], data['stat_err'][:,1:], data['exposure'], data['tstart'], data['tstop']  
+    return data['channel'], data['counts'], data['sys_err'], data['stat_err'], data['exposure'], data['tstart'], data['tstop']  
 
 def _read_xsm_rmf_file(file):
     """
@@ -208,4 +208,4 @@ def _read_xsm_rmf_file(file):
     photon_bin_hi = data2["energ_hi"]
     
 
-    return count_bin_lo[1:], count_bin_hi[1:], photon_bin_lo, photon_bin_hi, data2['matrix']
+    return count_bin_lo, count_bin_hi, photon_bin_lo, photon_bin_hi, data2['matrix']
