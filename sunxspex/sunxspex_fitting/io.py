@@ -161,7 +161,7 @@ def _read_stix_srm_file(srm_file):
             "count_energy_bin_edges": np.concatenate((d3['E_MIN'][:, None], d3['E_MAX'][:, None]), axis=1),
             "drm": d1['MATRIX']*d0["GEOAREA"]}
 
-def _read_xsm_pha_file(file):
+def _read_xsm_pha_file(file, time_series=False):
     """
     Read a .pha file and extract useful information from it.
 
@@ -177,9 +177,13 @@ def _read_xsm_pha_file(file):
     """
     with fits.open(file) as hdul:
         data = hdul[1].data
+        header_for_livetime = hdul[1].header
 
-    return data['channel'], data['counts'], data['sys_err'], data['stat_err'], data['exposure'], data['tstart'], data['tstop']  
+    if time_series:
+        return data['channel'], data['counts'], data['sys_err'], data['stat_err'], data['exposure'], data['tstart'], data['tstop']
 
+    else:
+        return data['channel'], data['counts'], data['sys_err'], data['stat_err'], header_for_livetime["EXPOSURE"]
 def _read_xsm_rmf_file(file):
     """
     Read a .rmf file and extract useful information from it.

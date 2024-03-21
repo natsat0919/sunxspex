@@ -1564,12 +1564,12 @@ class XsmLoader(InstrumentBlueprint):
     """
     __doc__ += InstrumentBlueprint._UNIVERSAL_DOC_
 
-    def __init__(self, pha_file, srm_file=None, custom_channel_bins=None, custom_photon_bins=None, **kwargs):
+    def __init__(self, pha_file, arf_file=None, srm_file=None, custom_channel_bins=None, custom_photon_bins=None, **kwargs):
         """Construct a string to show how the class was constructed (`_construction_string`) and set the `_loaded_spec_data` dictionary attribute."""
 
         self._construction_string = f"XsmLoader(pha_file={pha_file},srm_file={srm_file},custom_channel_bins={custom_channel_bins},custom_photon_bins={custom_photon_bins},**{kwargs})"
 
-        self._loaded_spec_data = self._load1spec(pha_file, srm_file, channel_bins=custom_channel_bins, photon_bins=custom_photon_bins)
+        self._loaded_spec_data = self._load1spec(pha_file, arf_file, srm_file, channel_bins=custom_channel_bins, photon_bins=custom_photon_bins)
 
         self._time_fmt, self._time_scale = "isot", "utc"
         self._start_background_time, self._end_background_time = None, None
@@ -1578,7 +1578,7 @@ class XsmLoader(InstrumentBlueprint):
         # used to give the user a warning if incompatible times are set
         self.__warn = True
 
-    def _load1spec(self, f_pha, f_rmf, channel_bins=None, photon_bins=None):
+    def _load1spec(self, f_pha, f_arf, f_rmf, channel_bins=None, photon_bins=None):
             """ Loads all the information in for a given spectrum.
 
             Parameters
@@ -1628,8 +1628,16 @@ class XsmLoader(InstrumentBlueprint):
                                                                                     "rmf.redistribution_matrix":redist_m}
                                                                          }.
             """
+
+            f_arf = f_pha[:-3]+"arf" if type(f_arf) == type(None) else f_arf
+
+            if os_path.isfile(f_arf):
+
+                _, counts, syst_err, stat_err, eff_exp= io._read_xsm_pha_file(f_pha)
+
+            else:
                         
-            _, counts, syst_err, stat_err, eff_exp, tstart, tstop = io._read_xsm_pha_file(f_pha)
+                _, counts, syst_err, stat_err, eff_exp, tstart, tstop = io._read_xsm_pha_file(f_pha, time_series=True)
 
             self._lvt_perspec = eff_exp
 
@@ -1637,32 +1645,58 @@ class XsmLoader(InstrumentBlueprint):
 
             # if there is an RMF file load it in and convert to a redistribution matrix
             if os_path.isfile(f_rmf):
-                    count_bins, photon_bins, count_bins_mask, photon_bins_mask, matrix, redist_m = xsm_spec._load_rmf(f_rmf)
-                    eff_area = np.ones(np.shape(redist_m)[0])
-                    srm = nu_spec.make_srm(rmf_matrix=redist_m, arf_array=eff_area)
+                count_bins, photon_bins, count_bins_mask, photon_bins_mask, matrix, redist_m = xsm_spec._load_rmf(f_rmf)
+    
             else:
                 count_bins, photon_bins, count_bins_mask, photon_bins_mask, matrix, redist_m = None, None, None, None, None, None
+
+            
+
+            if os_path.isfile(f_arf):
+                e_lo_arf, e_hi_arf, eff_area = io._read_arf(f_arf)
+                eff_area = eff_area[photon_bins_mask]
+            else:
+                eff_area = np.ones(np.shape(redist_m)[0])
+
+            srm = nu_spec.make_srm(rmf_matrix=redist_m, arf_array=eff_area)
 
             # need effective exposure and energy binning since likelihood works on counts, not count rates etc.
             count_channel_binning = np.diff(count_bins).flatten()
 
             phot_channel_binning = np.diff(photon_bins).flatten()
 
-            counts_shape = np.shape(counts)
-            count_axis_length = np.sum(count_bins_mask)
 
-            self._counts_perspec  = np.zeros((counts_shape[0], count_axis_length))
+            
+            if os_path.isfile(f_arf):
+                self._counts_perspec  = counts[count_bins_mask]
+                self._counts_err_perspec  = counts_err[count_bins_mask]
 
-            self._counts_err_perspec = np.zeros((counts_shape[0], count_axis_length))
+            else:
+                counts_shape = np.shape(counts)
 
-            for i in range(np.shape(counts)[0]):
-                self._counts_perspec[i, :]  = counts[i, :][count_bins_mask]
-                self._counts_err_perspec[i, :]  = counts_err[i, :][count_bins_mask]
+                count_axis_length = np.sum(count_bins_mask)
 
-            # get the count rate information
-            self._count_rate_perspec, self._count_rate_error_perspec, self._time_bins_perspec = xsm_spec.flux_cts_spec(self._counts_perspec, self._counts_err_perspec, count_channel_binning, self._lvt_perspec, tstart, tstop)
+                self._counts_perspec  = np.zeros((counts_shape[0], count_axis_length))
 
-            self._full_obs_time = [self._time_bins_perspec[0, 0], self._time_bins_perspec[-1, -1]]
+                self._counts_err_perspec = np.zeros((counts_shape[0], count_axis_length))
+
+                for i in range(np.shape(counts)[0]):
+                    self._counts_perspec[i, :]  = counts[i, :][count_bins_mask]
+                    self._counts_err_perspec[i, :]  = counts_err[i, :][count_bins_mask]
+
+            
+            if os_path.isfile(f_arf):
+                self._count_rate_perspec = self._counts_perspec/eff_exp/count_channel_binning
+                self._count_rate_error_perspec = self._counts_err_perspec/eff_exp/count_channel_binning
+
+                self._full_obs_time = [0, 0]
+
+            else:
+                # get the count rate information
+                self._count_rate_perspec, self._count_rate_error_perspec, self._time_bins_perspec = xsm_spec.flux_cts_spec(self._counts_perspec, self._counts_err_perspec, count_channel_binning, self._lvt_perspec, tstart, tstop)
+
+                self._full_obs_time = [self._time_bins_perspec[0, 0], self._time_bins_perspec[-1, -1]] 
+
 
             # what spectral info you want to know from this observation
             return {"photon_channel_bins": photon_bins,
