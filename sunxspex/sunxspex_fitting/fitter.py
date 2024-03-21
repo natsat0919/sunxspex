@@ -42,6 +42,7 @@ from sunxspex.sunxspex_fitting.likelihoods import LogLikelihoods
 from sunxspex.sunxspex_fitting.parameter_handler import Parameters, isnumber
 from sunxspex.sunxspex_fitting.photon_models_for_fitting import (  # noqa
     defined_photon_models,
+    thermal_abund,
     f_vth,
     thick_fn,
     thick_warm,

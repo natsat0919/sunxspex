@@ -9,7 +9,7 @@ import astropy.units as u
 from sunpy.data import manager
 from sunxspex.io import load_chianti_continuum, load_chianti_lines_lite, load_xray_abundances
 
-__all__ = ['thermal_emission', 'continuum_emission', 'line_emission',
+__all__ = ['thermal_emission_abund', 'thermal_emission', 'continuum_emission', 'line_emission',
            'setup_continuum_parameters', 'setup_line_parameters', 'setup_default_abundances']
 
 doc_string_params = """
@@ -186,6 +186,47 @@ CONTINUUM_GRID = setup_continuum_parameters()
 LINE_GRID = setup_line_parameters()
 DEFAULT_ABUNDANCES = setup_default_abundances()
 DEFAULT_ABUNDANCE_TYPE = "sun_coronal_ext"
+
+@u.quantity_input(energy_edges=u.keV,
+                  temperature=u.K,
+                  emission_measure=(u.cm**(-3), u.cm**(-5)),
+                  observer_distance=u.cm)
+def thermal_emission_abund(energy_edges,
+                           temperature,
+                            emission_measure,
+                            Mg_abund, 
+                            Al_abund, 
+                            Si_abund, 
+                            S_abund,
+                            abundance_type=DEFAULT_ABUNDANCE_TYPE,
+                            relative_abundances=None,
+                            observer_distance=(1*u.AU).to(u.cm)):
+    f"""Calculate the thermal X-ray spectrum (lines + continuum) from the solar atmosphere.
+
+    The flux is calculated as a function of temperature and emission measure.
+    Which continuum mechanisms are included --- free-free, free-bound, or two-photon --- are
+    determined by the file from which the continuum parameters are loaded.
+    To change the file used, see the setup_continuum_parameters() function.
+
+    {doc_string_params}"""
+    # Convert inputs to known units and confirm they are within range.
+    energy_edges_keV, temperature_K = _sanitize_inputs(energy_edges, temperature)
+    energy_range = (min(CONTINUUM_GRID["energy range keV"][0], LINE_GRID["energy range keV"][0]),
+                    max(CONTINUUM_GRID["energy range keV"][1], LINE_GRID["energy range keV"][1]))
+    _error_if_input_outside_valid_range(energy_edges_keV, energy_range, "energy", "keV")
+    temp_range = (min(CONTINUUM_GRID["temperature range K"][0], LINE_GRID["temperature range K"][0]),
+                  max(CONTINUUM_GRID["temperature range K"][1], LINE_GRID["temperature range K"][1]))
+    _error_if_input_outside_valid_range(temperature_K, temp_range, "temperature", "K")
+    # Calculate abundances
+    abundances = _calculate_abundances(abundance_type, relative_abundances, Mg_abund=Mg_abund, Al_abund=Al_abund, Si_abund=Si_abund, S_abund=S_abund)
+    # Calculate fluxes.
+    continuum_flux = _continuum_emission(energy_edges_keV, temperature_K, abundances)
+    line_flux = _line_emission(energy_edges_keV, temperature_K, abundances)
+    flux = ((continuum_flux + line_flux) * emission_measure /
+            (4 * np.pi * observer_distance**2))
+    if temperature.isscalar and emission_measure.isscalar:
+        flux = flux[0]
+    return flux
 
 
 @u.quantity_input(energy_edges=u.keV,
@@ -722,8 +763,17 @@ def _warn_if_input_outside_valid_range(input_values, grid_range, param_name, par
         warnings.warn(message)
 
 
-def _calculate_abundances(abundance_type, relative_abundances):
-    abundances = DEFAULT_ABUNDANCES[abundance_type].data
+def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al_abund=None, Si_abund=None, S_abund=None):
+    abundances = np.copy(DEFAULT_ABUNDANCES[abundance_type].data)
+    if Mg_abund:
+        abundances[11] = Mg_abund
+    if Al_abund:
+        abundances[12] = Al_abund
+    if Si_abund:
+        abundances[13] = Si_abund
+    if S_abund:
+        abundances[15] = S_abund
+
     if relative_abundances:
         # Convert input relative abundances to array where
         # first axis is atomic number, i.e == index + 1
