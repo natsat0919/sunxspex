@@ -46,6 +46,7 @@ from sunxspex.sunxspex_fitting.photon_models_for_fitting import (  # noqa
     f_vth,
     thick_fn,
     thick_warm,
+    thin_fn
 )
 from sunxspex.sunxspex_fitting.rainbow_text import rainbow_text_lines
 
