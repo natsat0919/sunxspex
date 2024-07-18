@@ -9,10 +9,10 @@ import numpy as np
 
 from astropy import units as u
 
-from ..emission import bremsstrahlung_thick_target  # bremsstrahlung_thin_target
+from ..emission import bremsstrahlung_thick_target, bremsstrahlung_thin_target
 from ..thermal import thermal_emission, thermal_emission_abund
 
-__all__ = ["defined_photon_models", "thermal_abund", "f_vth", "thick_fn", "thick_warm"]
+__all__ = ["defined_photon_models", "thermal_abund", "f_vth", "thick_fn", "thick_warm", "thin_fn"]
 
 # Issue when using np.float64 numbers for the parameters as it ends up returning all nans and infs but rounding to 15 decimal places fixes this??????
 
@@ -20,7 +20,8 @@ __all__ = ["defined_photon_models", "thermal_abund", "f_vth", "thick_fn", "thick
 defined_photon_models = {"thermal_abund": ["T_abund", "EM_abund", "Mg", "Al", "Si", "S"],
                          "f_vth": ["T", "EM"],
                          "thick_fn": ["total_eflux", "index", "e_c"],
-                         "thick_warm": ["tot_eflux", "indx", "ec", "plasma_d", "loop_temp", "length"]}
+                         "thick_warm": ["tot_eflux", "indx", "ec", "plasma_d", "loop_temp", "length"],
+                         "thin_fn": ["total_e_flux", "idx", "low_e_c"],}
 
 
 def thermal_abund(temperature, emission_measure46, Mg, Al, Si, S, energies=None):
@@ -187,3 +188,50 @@ def thick_warm(total_eflux, index, e_c, plasma_d, loop_temp, length, energies=No
     em46 = em_add*1e-46  # get EM in units of 10^46 cm^(-3)
 
     return thick_fn(total_eflux, index, e_c, energies=energies) + f_vth(loop_temp, em46, energies=energies)
+
+def thin_fn(total_e_flux, idx, low_e_c, energies=None):
+    """ Calculates the thn-target bremsstrahlung radiation of a single power-law electron distribution.
+
+    [1] Brown, Solar Physics 18, 489 (1971) (https://link.springer.com/article/10.1007/BF00149070)
+    [2] https://hesperia.gsfc.nasa.gov/ssw/packages/xray/doc/brm_thick_doc.pdf
+    [3] https://hesperia.gsfc.nasa.gov/ssw/packages/xray/idl/brm2/brm2_thicktarget.pro
+
+    Parameters
+    ----------
+    energies : 2d array
+            Array of energy bins for the model to be calculated over.
+            E.g., [[1,1.5],[1.5,2],[2,2.5],...].
+
+    total_e_flux : int or float
+            Total integrated electron flux, in units of 10^35 e^- s^-1.
+
+    idx : int or float
+            Power-law idx of the electron distribution.
+
+    low_e_c : int or float
+            Low-energy cut-off of the electron distribution in units of keV.
+
+    Returns
+    -------
+    A 1d array of thin-target bremsstrahlung radiation in units
+    of ph s^-1 cm^-2 keV^-1.
+    """
+
+    hack = np.round([total_e_flux, idx, low_e_c], 15)
+    total_e_flux, idx, low_e_c = hack[0],  hack[1],  hack[2]
+
+    energies = np.mean(energies, axis=1)  # since energy bins are given, use midpoints though
+
+    # total_eflux in units of 1e35 e/s
+    # single power law so set eebrk==eehigh at a high value, high q also
+    output = bremsstrahlung_thin_target(photon_energies=energies,
+                                         p=idx,
+                                         eebrk=150,
+                                         q=20,
+                                         eelow=low_e_c,
+                                         eehigh=150)*total_e_flux*1e54
+
+    output[np.isnan(output)] = 0
+    output[~np.isfinite(output)] = 0
+
+    return output
