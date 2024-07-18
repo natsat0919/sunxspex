@@ -76,9 +76,9 @@ def _get_IDLspec_file_info(spec_file):
 
     cts_rate_err = sdict["1"][1]["STAT_ERR"]
 
-    counts_err = cts_rate_err * time_del[:, None]
+    counts_err = cts_rate_err * lvt[:, None] * time_del[:, None]
 
-    counts = cts_rates * time_del[:, None]
+    counts = cts_rates * lvt[:, None] * time_del[:, None]
 
     # Adding the 3% above 10 keV, 5% bellow 10keV  or 7% systematic errors bellow 7keV
     #Getting the array with percentages coresponding to each energy bin
@@ -95,7 +95,7 @@ def _get_IDLspec_file_info(spec_file):
     counts_err = np.sqrt(counts_err**2 + systematic_err**2)
 
     #Count rate error
-    cts_rate_err = counts_err / time_del[:, None]
+    cts_rate_err = counts_err / lvt[:, None] / time_del[:, None]
 
 
     return channel_bins, channel_bins_inds, time_bins, lvt, counts, counts_err, cts_rates, cts_rate_err
