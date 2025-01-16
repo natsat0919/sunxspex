@@ -257,7 +257,7 @@ def thermal_emission(
         min(CONTINUUM_GRID["energy range keV"][0], LINE_GRID["energy range keV"][0]),
         max(CONTINUUM_GRID["energy range keV"][1], LINE_GRID["energy range keV"][1]),
     )
-    _error_if_input_outside_valid_range(energy_edges_keV, energy_range, "energy", "keV")
+    _warn_if_input_outside_valid_range(energy_edges_keV, energy_range, "energy", "keV")
     temp_range = (
         min(CONTINUUM_GRID["temperature range K"][0], LINE_GRID["temperature range K"][0]),
         max(CONTINUUM_GRID["temperature range K"][1], LINE_GRID["temperature range K"][1]),
@@ -295,7 +295,7 @@ def continuum_emission(
     {doc_string_params}"""
     # Convert inputs to known units and confirm they are within range.
     energy_edges_keV, temperature_K = _sanitize_inputs(energy_edges, temperature)
-    _error_if_input_outside_valid_range(energy_edges_keV, CONTINUUM_GRID["energy range keV"], "energy", "keV")
+    _warn_if_input_outside_valid_range(energy_edges_keV, CONTINUUM_GRID["energy range keV"], "energy", "keV")
     _error_if_input_outside_valid_range(temperature_K, CONTINUUM_GRID["temperature range K"], "temperature", "K")
     # Calculate abundances
     abundances = _calculate_abundances(abundance_type, relative_abundances)
@@ -507,6 +507,7 @@ def _line_emission(energy_edges_keV, temperature_K, abundances):
 def _interpolate_continuum_intensities(data_grid, log10T_grid, energy_grid_keV, energy_keV, log10T):
     # Determine valid range based on limits of intensity grid's spectral extent
     # and the normalized temperature component of intensity.
+
     n_tband = len(log10T_grid)
     (vrange,) = np.where(data_grid[0] > 0)
     for i in range(1, n_tband):
@@ -515,7 +516,7 @@ def _interpolate_continuum_intensities(data_grid, log10T_grid, energy_grid_keV, 
             vrange = vrange_i
     data_grid = data_grid[:, vrange]
     energy_grid_keV = energy_grid_keV[vrange]
-    (energy_idx,) = np.where(energy_keV < energy_grid_keV.max())
+    (energy_idx,) = np.where((energy_keV < energy_grid_keV.max()))
 
     # Interpolate temperature component of intensity and derive continuum intensity.
     flux = np.zeros(energy_keV.shape)
