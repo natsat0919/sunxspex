@@ -17,13 +17,13 @@ __all__ = ["defined_photon_models", "thermal_abund", "f_vth", "thick_fn", "thick
 # Issue when using np.float64 numbers for the parameters as it ends up returning all nans and infs but rounding to 15 decimal places fixes this??????
 
 # The defined models shouldn't have duplicate parameter input names
-defined_photon_models = {"thermal_abund": ["T_abund", "EM_abund", "Mg", "Al", "Si", "S"],
+defined_photon_models = {"thermal_abund": ["T_abund", "EM_abund", "Mg", "Al", "Si", "S", "Ca"],
                          "f_vth": ["T", "EM"],
                          "thick_fn": ["total_eflux", "index", "e_c"],
                          "thick_warm": ["tot_eflux", "indx", "ec", "plasma_d", "loop_temp", "length"],
                          "thin_fn": ["total_e_flux", "idx", "low_e_c"],}
 
-def thermal_abund(temperature, emission_measure46, Mg, Al, Si, S, energies=None):
+def thermal_abund(temperature, emission_measure46, Mg, Al, Si, S, Ca, energies=None):
     """ Calculates optically thin thermal bremsstrahlung radiation as seen from Earth.
 
     [1] https://hesperia.gsfc.nasa.gov/ssw/packages/xray/idl/f_vth.pro
@@ -49,7 +49,7 @@ def thermal_abund(temperature, emission_measure46, Mg, Al, Si, S, energies=None)
     energies = np.unique(np.array(energies).flatten()) << u.keV  # turn [[1,2],[2,3],[3,4]] into [1,2,3,4]
     temperature = temperature*1e6 << u.K
     emission_measure = emission_measure46*1e46 << u.cm**(-3)
-    return thermal_emission_abund(energies, temperature, emission_measure, Mg, Al, Si, S).value
+    return thermal_emission_abund(energies, temperature, emission_measure, Mg, Al, Si, S, Ca).value
 
 def f_vth(temperature, emission_measure46, energies=None):
     """Calculates optically thin thermal bremsstrahlung radiation as seen from Earth.

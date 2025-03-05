@@ -202,6 +202,7 @@ def thermal_emission_abund(energy_edges,
                             Al_abund, 
                             Si_abund, 
                             S_abund,
+                            Ca_abund,
                             abundance_type=DEFAULT_ABUNDANCE_TYPE,
                             relative_abundances=None,
                             observer_distance=(1*u.AU).to(u.cm)):
@@ -789,7 +790,7 @@ def _warn_if_input_outside_valid_range(input_values, grid_range, param_name, par
         warnings.warn(message)
 
 
-def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al_abund=None, Si_abund=None, S_abund=None):
+def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al_abund=None, Si_abund=None, S_abund=None, Ca_abund=None):
     abundances = np.copy(DEFAULT_ABUNDANCES[abundance_type].data)
     if Mg_abund:
         abundances[11] = Mg_abund
@@ -799,6 +800,8 @@ def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al
         abundances[13] = Si_abund
     if S_abund:
         abundances[15] = S_abund
+    if Ca_abund:
+        abundances[19] = Ca_abund
 
     if relative_abundances:
         # Convert input relative abundances to array where
