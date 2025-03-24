@@ -222,8 +222,13 @@ def thermal_emission_abund(energy_edges,
     temp_range = (min(CONTINUUM_GRID["temperature range K"][0], LINE_GRID["temperature range K"][0]),
                   max(CONTINUUM_GRID["temperature range K"][1], LINE_GRID["temperature range K"][1]))
     _error_if_input_outside_valid_range(temperature_K, temp_range, "temperature", "K")
+
+    if Mg_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][11] and Al_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][12]:
+        abundance_type = 'sun_coronal_ext'
+    else:
+        abundance_type = 'sun_hybrid_ext'
     # Calculate abundances
-    abundances = _calculate_abundances(abundance_type, relative_abundances, Mg_abund=Mg_abund, Al_abund=Al_abund, Si_abund=Si_abund, S_abund=S_abund)
+    abundances = _calculate_abundances(abundance_type, relative_abundances, Mg_abund=Mg_abund, Al_abund=Al_abund, Si_abund=Si_abund, S_abund=S_abund, Ca_abund=Ca_abund)
     # Calculate fluxes.
     continuum_flux = _continuum_emission(energy_edges_keV, temperature_K, abundances)
     line_flux = _line_emission(energy_edges_keV, temperature_K, abundances)
