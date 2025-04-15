@@ -223,7 +223,7 @@ def thermal_emission_abund(energy_edges,
                   max(CONTINUUM_GRID["temperature range K"][1], LINE_GRID["temperature range K"][1]))
     _error_if_input_outside_valid_range(temperature_K, temp_range, "temperature", "K")
 
-    if Mg_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][11] and Al_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][12]:
+    if (Mg_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][11] and Al_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][12]) or Ca_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][19] :
         abundance_type = 'sun_coronal_ext'
     else:
         abundance_type = 'sun_hybrid_ext'
