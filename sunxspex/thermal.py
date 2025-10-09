@@ -203,6 +203,7 @@ def thermal_emission_abund(energy_edges,
                             Si_abund, 
                             S_abund,
                             Ca_abund,
+                            Ar_abund,
                             abundance_type=DEFAULT_ABUNDANCE_TYPE,
                             relative_abundances=None,
                             observer_distance=(1*u.AU).to(u.cm)):
@@ -223,12 +224,12 @@ def thermal_emission_abund(energy_edges,
                   max(CONTINUUM_GRID["temperature range K"][1], LINE_GRID["temperature range K"][1]))
     _error_if_input_outside_valid_range(temperature_K, temp_range, "temperature", "K")
 
-    if (Mg_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][11] and Al_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][12]) or Ca_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][19] :
+    if (Mg_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][11] and Al_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][12]) or Ca_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][19] and Ar_abund == DEFAULT_ABUNDANCES['sun_coronal_ext'][17]:
         abundance_type = 'sun_coronal_ext'
     else:
         abundance_type = 'sun_hybrid_ext'
     # Calculate abundances
-    abundances = _calculate_abundances(abundance_type, relative_abundances, Mg_abund=Mg_abund, Al_abund=Al_abund, Si_abund=Si_abund, S_abund=S_abund, Ca_abund=Ca_abund)
+    abundances = _calculate_abundances(abundance_type, relative_abundances, Mg_abund=Mg_abund, Al_abund=Al_abund, Si_abund=Si_abund, S_abund=S_abund, Ca_abund=Ca_abund, Ar_abund=Ar_abund)
     # Calculate fluxes.
     continuum_flux = _continuum_emission(energy_edges_keV, temperature_K, abundances)
     line_flux = _line_emission(energy_edges_keV, temperature_K, abundances)
@@ -795,7 +796,7 @@ def _warn_if_input_outside_valid_range(input_values, grid_range, param_name, par
         warnings.warn(message)
 
 
-def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al_abund=None, Si_abund=None, S_abund=None, Ca_abund=None):
+def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al_abund=None, Si_abund=None, S_abund=None, Ca_abund=None, Ar_abund=None):
     abundances = np.copy(DEFAULT_ABUNDANCES[abundance_type].data)
     if Mg_abund:
         abundances[11] = Mg_abund
@@ -807,6 +808,8 @@ def _calculate_abundances(abundance_type, relative_abundances, Mg_abund=None, Al
         abundances[15] = S_abund
     if Ca_abund:
         abundances[19] = Ca_abund
+    if Ar_abund:
+        abundances[17] = Ar_abund
 
     if relative_abundances:
         # Convert input relative abundances to array where
