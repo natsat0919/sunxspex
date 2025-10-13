@@ -8,7 +8,7 @@ import numpy as np
 
 from astropy.io import fits
 
-from sunkit_spex.extern import rhessi, stix
+from sunkit_spex.extern import rhessi, stix, hxi_ospex
 from sunkit_spex.legacy.fitting import instruments as inst  # sunkit_spex.fitting.instruments
 from sunkit_spex.legacy.fitting.parameter_handler import (  # sunkit_spex.fitting.parameter_handler
     _make_into_list,
@@ -136,7 +136,7 @@ class LoadSpec:
             f"srm_file={srm_file},srm_custom={srm_custom},custom_channel_bins={custom_channel_bins}, **{kwargs})"
         )
 
-        self.instrument_loaders = {"NuSTAR": inst.NustarLoader, "RHESSI": rhessi.LegacyRhessiLoader, "Solar Orbiter": stix.STIXLoader}
+        self.instrument_loaders = {"NuSTAR": inst.NustarLoader, "RHESSI": rhessi.LegacyRhessiLoader, "Solar Orbiter": stix.STIXLoader, "ASO-S": hxi_ospex.HXI_OSPEXLoader}
 
         pha_file, arf_file, rmf_file, srm_file, srm_custom, custom_channel_bins, instruments = self._sort_files(
             pha_file=pha_file,
@@ -292,7 +292,7 @@ class LoadSpec:
         for pf in pha_files:
             with fits.open(pf) as hdul:
                 if "TELESCOP" in hdul[0].header:
-                    # works for 'NuSTAR' and 'RHESSI'
+                    # works for 'NuSTAR', 'RHESSI', 'Solar Orbiter', 'ASO-S'
                     _instruments_names.append(hdul[0].header["TELESCOP"])
                 else:
                     print("How do I know the instrument?")
