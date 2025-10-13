@@ -787,76 +787,55 @@ class HXI_OSPEXLoader(instruments.InstrumentBlueprint):
         -------
         None.
         """
-        if type(self.background_subtraction) is not type(None):
-            # check that bg_start<bg_end
-            if self._start_background_time >= self._end_background_time:
-                if self.__warn:
-                    self.__time_warning()
-                return
-            
-            background_effective_exposure = 0
-            for time_range in bkg_spec.time_ranges:
-             # isolate livetimes and time binning
-                _livetimes = np.mean(
-                    self._data_time_select(
-                        stime=time_range[0], full_data=self._lvt_perspec, etime=time_range[1]
-                    ), axis=0
-                )
-            
-                # to convert a model count rate to counts, so need mean
-                _actual_first_bin = self._data_time_select(
-                    stime=self.time_range[0],
-                    full_data=self._time_bins_perspec[:, 0],
-                    etime=self.time_range[1],
-                )[0]
-                _actual_last_bin = self._data_time_select(
-                    stime=self.time_range[0],
-                    full_data=self._time_bins_perspec[:, 1],
-                    etime=self.time_range[1],
-                )[-1]
-
-                background_effective_exposure +=np.diff([_actual_first_bin, _actual_last_bin])[0].to_value("s") * _livetimes
-
-            self._loaded_spec_data["extras"]["background_effective_exposure"] = background_effective_exposure
-            count_channel_binning = self._loaded_spec_data["count_channel_binning"]
-            
-            if "background_rate" not in self._loaded_spec_data["extras"].keys():
-                self._loaded_spec_data["extras"]["background_rate"] = (bkg_rate := bkg_spec.spec/count_channel_binning)
-                
-            else:
-                current_bkg_rate = self._loaded_spec_data["extras"]["background_rate"]
-                # calculate new count rates and errors
-                self._loaded_spec_data["extras"]["background_rate"] = (bkg_rate := np.add(bkg_spec.spec, current_bkg_rate)/count_channel_binning)
-
-            # get background data, woo!
-            # sum counts over time range
-            self._loaded_spec_data["extras"]["background_counts"] = (bkg_count := bkg_rate * background_effective_exposure * count_channel_binning)
-
-            self._loaded_spec_data["extras"]["background_count_error"] = (bkg_counts_err := np.sqrt(bkg_count))
         
+        background_effective_exposure = 0
+        for time_range in bkg_spec.time_ranges:
+            # isolate livetimes and time binning
+            _livetimes = np.mean(
+                self._data_time_select(
+                    stime=time_range[0], full_data=self._lvt_perspec, etime=time_range[1]
+                ), axis=0
+            )
+        
+            # to convert a model count rate to counts, so need mean
+            _actual_first_bin = self._data_time_select(
+                stime=time_range[0],
+                full_data=self._time_bins_perspec[:, 0],
+                etime=time_range[1],
+            )[0]
+            _actual_last_bin = self._data_time_select(
+                stime=time_range[0],
+                full_data=self._time_bins_perspec[:, 1],
+                etime=time_range[1],
+            )[-1]
+
+            background_effective_exposure +=np.diff([_actual_first_bin, _actual_last_bin])[0].to_value("s") * _livetimes
+
+        self._loaded_spec_data["extras"]["background_effective_exposure"] = background_effective_exposure
+        count_channel_binning = self._loaded_spec_data["count_channel_binning"]
+        
+        if "background_rate" not in self._loaded_spec_data["extras"].keys():
+            self._loaded_spec_data["extras"]["background_rate"] = (bkg_rate := bkg_spec.final_bkg_spec/count_channel_binning)
             
-            self._loaded_spec_data["extras"]["background_rate_error"] = bkg_counts_err/ background_effective_exposure/ count_channel_binning
+        else:
+            current_bkg_rate = self._loaded_spec_data["extras"]["background_rate"]
+            # calculate new count rates and errors
+            self._loaded_spec_data["extras"]["background_rate"] = (bkg_rate := np.add(bkg_spec.final_bkg_spec/count_channel_binning, current_bkg_rate))
+
+        # get background data, woo!
+        # sum counts over time range
+        self._loaded_spec_data["extras"]["background_counts"] = (bkg_count := bkg_rate * background_effective_exposure * count_channel_binning)
+
+        self._loaded_spec_data["extras"]["background_count_error"] = (bkg_counts_err := np.sqrt(bkg_count))
+    
+        
+        self._loaded_spec_data["extras"]["background_rate_error"] = bkg_counts_err/ background_effective_exposure/ count_channel_binning
     
 
-        else:
-            # if either the start or end background time is None, or set to None, then makes sure the background data is removed if it is there
-            for key in self._loaded_spec_data["extras"].copy().keys():
-                if key.startswith("background"):
-                    del self._loaded_spec_data["extras"][key]
-
-    @property
-    def setup_background(self):
-        """***Property*** States the set background end time.
-
-        Returns
-        -------
-        Astropy.Time of the set background end time.
-        """
-        return self.setup_background
-
-    @setup_background.setter
-    def setup_background(self):
-        bkg_spec = BackgroundHandler(self)
+    def setup_background(self, energy_range, time_ranges, order):
+        bkg_spec = BackgroundHandler(inst_object=self, energy_range=energy_range, time_ranges=time_ranges, order=order)
+        print("yes")
+        bkg_spec.fit_bin()
         bkg_spec.evaluate()
 
         self._update_bg_data_with_times(bkg_spec)
@@ -1283,16 +1262,13 @@ class HXI_OSPEXLoader(instruments.InstrumentBlueprint):
 
         self.__warn = True
 
-    def setup_background(self):
-        self.background_handler = BackgroundHandler(self)
-
 
 class BackgroundHandler:
     """
     Manages and interpolates background spectra in time for each energy bin.
     """
 
-    def __init__(self, inst_object):
+    def __init__(self, inst_object, energy_range: tuple, time_ranges: list[tuple[float, float]], order: int = 2):
         """
         Parameters
         ----------
@@ -1302,56 +1278,57 @@ class BackgroundHandler:
             Background counts or rates per energy bin.
         """
         self.inst_object = inst_object
-        self.time_ranges = []
-        self.energy_range = ()
+        self.time_ranges = time_ranges
+        self.energy_range = energy_range
+        self.order = order
         self.interpolated_avg_profile = []
         self.energy_mask = []
         self.final_bkg_spec = []
         self.models = {}  # callable function so that have the best fit params for interpolation saved
 
-    def fit_bin(self, energy_range: tuple, time_ranges: list[tuple[float, float]], order: int = 2):
+    def fit_bin(self):
         """
         Fit a polynomial to the background in a given energy bin
         using data from one or more time ranges.
 
         https://hesperia.gsfc.nasa.gov/ssw/packages/spex/doc/ospex_explanation.htm
         """
-        self.time_ranges = self.format_times(time_ranges)
-        self.energy_range = energy_range
+        self.time_ranges = self.format_times(self.time_ranges)
 
-        count_rate_trs = self.get_spec_data()
+        count_rate_trs = self.get_spec_data(sum_bins=True)
 
-        print(count_rate_trs)
         #Box car smoothing
         window = np.ones(10) / 10
         count_rate_sum_smoothed = np.convolve(count_rate_trs, window, mode='same')
 
 
-        if len(count_rate_sum_smoothed) < order + 1:
-            raise ValueError(f"Not enough points to fit order {order} polynomial for energy range {energy_range} and time ranges {time_ranges}")
+        if len(count_rate_sum_smoothed) < self.order + 1:
+            raise ValueError(f"Not enough points to fit order {self.order} polynomial for energy range {self.energy_range} and time ranges {self.time_ranges}")
 
 
-        coeffs = poly.polyfit(np.arange(len(count_rate_sum_smoothed)), count_rate_sum_smoothed, order)
+        coeffs = poly.polyfit(np.arange(len(count_rate_sum_smoothed)), count_rate_sum_smoothed, self.order)
         interpolated_profile = poly.polyval(np.arange(len(count_rate_sum_smoothed)), coeffs)
-
-        avg_profile = np.mean(interpolated_profile, axis=0)
-        print(avg_profile)
 
         from scipy.signal import savgol_filter
 
-        self.interpolated_avg_profile = savgol_filter(interpolated_profile, 5, order)
+        self.interpolated_avg_profile = np.mean(savgol_filter(interpolated_profile, 5, self.order), axis=0)
         
 
     def evaluate(self) -> np.ndarray:
         """Evaluate the fitted polynomial model."""
+        print("Eval")
 
-        count_rate_trs = self.get_spec_data(sum_bins=False)
-        count_rate_trs_avg = np.mean(count_rate_trs, axis=1) / self.interpolated_avg_profile
+        count_rate_trs = self.get_spec_data(avg_bins=True)
+        print(self.interpolated_avg_profile)
+        count_rate_trs_avg = np.divide(count_rate_trs, float(self.interpolated_avg_profile))
 
-        spec = np.zeros(self.inst_object._loaded_spec_data["count_channel_binning"])
+        spec = np.zeros(len(self.inst_object._loaded_spec_data["count_channel_mids"]))
 
-        spec[self.energy_mask[0]:self.energy_mask[-1]] = count_rate_trs_avg
+        print(count_rate_trs_avg)
 
+        spec[self.energy_mask[0]:self.energy_mask[1]] += count_rate_trs_avg
+        
+        print(spec)
         self.final_bkg_spec = spec
 
     def format_times(self, time_ranges):
@@ -1385,7 +1362,7 @@ class BackgroundHandler:
             f"Some defined time ranges {time_ranges} are wrong. Please check you are using the correct time format {self.inst_object._time_fmt} and time scale {self.inst_object._time_scale}."
         )
             
-    def get_spec_data(self):
+    def get_spec_data(self, sum_bins=False, avg_bins=False):
         count_rate_trs = []
         for time_range in self.time_ranges:
             count_rate = self.inst_object._data_time_select(
@@ -1393,22 +1370,23 @@ class BackgroundHandler:
                     )
             
             #Sum the counts over energy range
-            energies = self.inst_object._loaded_spec_data["count_channel_mids"]
+            energies_low = self.inst_object._loaded_spec_data["count_channel_bins"][:, 0]
+            energies_high = self.inst_object._loaded_spec_data["count_channel_bins"][:, 1]
 
-            print("energies")
-            print(energies)
+            self.energy_mask.append(np.where((self.energy_range[0] >= energies_low))[0][0])
+            self.energy_mask.append(np.where((self.energy_range[1] <= energies_high))[0][-1])
             
-            self.energy_mask = np.where((energies > self.energy_range[0]) & (energies < self.energy_range[-1]))[0]
 
-            filtered_count_rate = count_rate[:, self.energy_mask[0]:self.energy_mask[-1]]
+            filtered_count_rate = count_rate[:, self.energy_mask[0]:self.energy_mask[1]]
 
-            print("counts")
-            print(filtered_count_rate)
-            filtered_count_rate = np.sum(filtered_count_rate, axis=1)
+            if sum_bins:
+                filtered_count_rate = np.sum(filtered_count_rate, axis=1)
+                count_rate_trs.extend(filtered_count_rate)
+            
+            if avg_bins:
+                count_rate_trs.extend(filtered_count_rate)
 
-            print("counts")
-            print(filtered_count_rate)
-            count_rate_trs.extend(filtered_count_rate)
-        print("f counts")
-        print(count_rate_trs)
+        if avg_bins:
+            count_rate_trs = np.mean(count_rate_trs, axis=0)
+
         return count_rate_trs
