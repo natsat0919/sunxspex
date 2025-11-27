@@ -804,6 +804,41 @@ class STIXLoader(instruments.InstrumentBlueprint):
         elif self.__warn:
             self.__time_warning()
 
+    def _check_start_background_time(self, bkg_stime):
+        """Method for checking the background start time format
+
+        Parameters
+        ----------
+        bkg_stime : str, `astropy.Time`, None
+                Event start time
+
+        Returns
+        -------
+        None.
+        """
+        if isinstance(bkg_stime, str):
+            # string format
+            _t = Time(bkg_stime, format=self._time_fmt, scale=self._time_scale)
+            self._start_background_time = Time(bkg_stime, format=self._time_fmt, scale=self._time_scale)
+        elif isinstance(bkg_stime, type(self._full_obs_time[0])):
+            # if user has provided an astropy time already
+            _t = bkg_stime
+        elif type(bkg_stime) is type(None):
+            # set to None to reset
+            _t = None
+        else:
+            # don't know what to do, print helpful(?) statement and don't do anything
+            self._req_time_fmt()
+            return
+
+        _set_bkg_stime = (not hasattr(self, "_end_background_time")) or (
+            hasattr(self, "_end_background_time") and _t < self._end_background_time
+        )
+        if _set_bkg_stime:
+            self._start_background_time = _t
+        elif self.__warn:
+            self.__time_warning()
+
 
     @property
     def end_event_time(self):
@@ -863,6 +898,38 @@ class STIXLoader(instruments.InstrumentBlueprint):
         )
         if _set_evt_etime:
             self._end_event_time = _t
+        elif self.__warn:
+            self.__time_warning()
+
+    def _check_end_background_time(self, bg_etime):
+        """Method for checking the background end time format
+
+        Parameters
+        ----------
+        bkg_etime : str, `astropy.Time`, None
+                Event end time
+
+        Returns
+        -------
+        None.
+        """
+        if type(bg_etime) == str:
+            # string format
+            _t = Time(bg_etime, format=self._time_fmt, scale=self._time_scale)
+        elif type(bg_etime) == type(self._full_obs_time[1]):
+            # if user has provided an astropy time already
+            _t = bg_etime
+        elif type(bg_etime) == type(None):
+            # set to None to reset
+            _t = None
+        else:
+            # don't know what to do, print helpful(?) statement and don't do anything
+            self._req_time_fmt()
+            return
+
+        _set_bg_etime = (not hasattr(self, "_start_background_time")) or (type(_t) == type(None)) or (hasattr(self, "_start_background_time") and ((type(self._start_background_time) == type(None)) or (self._start_background_time < _t)))
+        if _set_bg_etime:
+            self._end_background_time = _t
         elif self.__warn:
             self.__time_warning()
 
@@ -975,13 +1042,13 @@ class STIXLoader(instruments.InstrumentBlueprint):
         -------
         None.
         """
-        if isinstance(bg_stime, str):
+        if type(bg_stime) == str:
             # string format
             _t = Time(bg_stime, format=self._time_fmt, scale=self._time_scale)
-        elif isinstance(bg_stime, type(self._full_obs_time[0])):
+        elif type(bg_stime) == type(self._full_obs_time[0]):
             # if user has provided an astropy time already
             _t = bg_stime
-        elif type(bg_stime) is type(None):
+        elif type(bg_stime) == type(None):
             # set to None to reset
             _t = None
         else:
@@ -989,14 +1056,8 @@ class STIXLoader(instruments.InstrumentBlueprint):
             self._req_time_fmt()
             return
 
-        _set_bg_stime = (
-            (not hasattr(self, "_end_background_time"))
-            or (type(_t) is type(None))
-            or (
-                hasattr(self, "_end_background_time")
-                and ((type(self._end_background_time) is type(None)) or (_t < self._end_background_time))
-            )
-        )
+        _set_bg_stime = (not hasattr(self, "_end_background_time")) or (type(_t) == type(None)) or (
+            hasattr(self, "_end_background_time") and ((type(self._end_background_time) == type(None)) or (_t < self._end_background_time)))
         if _set_bg_stime:
             self._start_background_time = _t
         elif self.__warn:
@@ -1504,8 +1565,8 @@ class STIXLoader(instruments.InstrumentBlueprint):
         """
         self.__warn = False if (type(start) is not type(None)) and (type(end) is not type(None)) else True
 
-        self._check_start_event_time(start)
-        self._check_end_event_time(end)
+        self._check_start_background_time(start)
+        self._check_end_background_time(end)
         self._update_bg_data_with_times()
 
         # change back to separate event time and background data
